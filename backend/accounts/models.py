@@ -48,7 +48,7 @@ class UserProfile(models.Model):
 
 class JobApplication(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='job_applications')
-    job_posting = models.ForeignKey(JobPosting, on_delete=models.CASCADE)  # unique related_name
+    job_posting = models.ForeignKey(JobPosting, on_delete=models.CASCADE)  
     resume = models.FileField(upload_to='job_applications/resumes/') 
     status = models.CharField(max_length=20, choices=[('Applied', 'Applied'), ('Interview', 'Interview'), ('Hired', 'Hired')], default='Applied')
     applied_on = models.DateTimeField(auto_now_add=True)

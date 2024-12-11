@@ -13,6 +13,48 @@ from accounts.models import State,City,JobApplication
 import json
 
 class JobPostingView(APIView):
+    def put(self, request, job_id):
+        data = request.data
+        print("Received data:", data)
+
+        try:
+            # Check if 'role_id' is passed as ID or role name, and get the Role object
+            if 'role_id' in data:
+                role_id = data['role_id']
+                # If role_id is an integer, get by id, otherwise get by name
+                if role_id.isdigit():  # If role_id is numeric, query by ID
+                    role = Role.objects.get(id=int(role_id))
+                else:  # Otherwise, query by role name
+                    role = Role.objects.get(name=role_id)
+            elif 'role' in data:  # If 'role' is passed as name, query by name
+                role = Role.objects.get(name=data['role'])
+            else:
+                return JsonResponse({'error': 'Role is required'}, status=400)
+
+            # Check if 'industry' is passed by name, and get the Industry object
+            if 'industry' in data:
+                industry = Industry.objects.get(name=data['industry'])
+            else:
+                return JsonResponse({'error': 'Industry is required'}, status=400)
+            
+            job = JobPosting.objects.get(id=job_id)
+            job.job_title = data.get('job_title', job.job_title)
+            job.job_description = data.get('job_description', job.job_description)
+            job.salary_min = data.get('salary_min', job.salary_min)
+            job.salary_max = data.get('salary_max', job.salary_max)
+            job.job_industry = industry
+            job.job_role = role
+            job.save()
+
+            return JsonResponse({'message': 'Job updated successfully!'}, status=200)
+        
+        except Industry.DoesNotExist:
+            return JsonResponse({'error': 'Invalid industry name'}, status=400)
+        except Role.DoesNotExist:
+            return JsonResponse({'error': 'Invalid role name or ID'}, status=400)
+        except JobPosting.DoesNotExist:
+            return JsonResponse({'error': 'Job not found'}, status=404)
+    
     def get(self, request, job_id=None):
         if job_id:
             try:
@@ -30,16 +72,16 @@ class JobPostingView(APIView):
             except JobPosting.DoesNotExist:
                 return JsonResponse({'error': 'Job not found'}, status=404)
 
-        industry_name = request.GET.get('industry')  # Fetch industry from query params
-        role_name = request.GET.get('role')  # Fetch role from query params
+        industry_name = request.GET.get('industry')
+        role_name = request.GET.get('role')  
 
         jobs = JobPosting.objects.all()
 
         if industry_name:
-            jobs = jobs.filter(job_industry__name__icontains=industry_name)  # Use __icontains for case-insensitive filtering
+            jobs = jobs.filter(job_industry__name__icontains=industry_name)  
 
         if role_name:
-            jobs = jobs.filter(job_role__name__icontains=role_name)  # Use __icontains for case-insensitive filtering
+            jobs = jobs.filter(job_role__name__icontains=role_name)  
 
         jobs_data = [
             {
@@ -57,12 +99,11 @@ class JobPostingView(APIView):
         return JsonResponse({'jobs': jobs_data}, safe=False)
 
     def post(self, request):
-        data = request.data  # Use request.data instead of request.POST
+        data = request.data  
         try:
             industry = Industry.objects.get(id=data['industry_id'])
             role = Role.objects.get(id=data['role_id'])
 
-            # Create the job posting
             job = JobPosting.objects.create(
                 job_title=data['job_title'],
                 job_description=data['job_description'],
@@ -78,27 +119,10 @@ class JobPostingView(APIView):
             return JsonResponse({'error': 'Invalid role ID'}, status=400)
         except KeyError as e:
             return JsonResponse({'error': f'Missing field: {str(e)}'}, status=400)
+        
 
-    def put(self, request, job_id):
-        data = request.data
-        try:
-            job = JobPosting.objects.get(id=job_id)
-            job.job_title = data.get('job_title', job.job_title)
-            job.job_description = data.get('job_description', job.job_description)
-            job.salary_min = data.get('salary_min', job.salary_min)
-            job.salary_max = data.get('salary_max', job.salary_max)
-            job.job_industry = Industry.objects.get(id=data['industry_id'])
-            job.job_role = Role.objects.get(id=data['role_id'])
-            job.save()
+    
 
-            return JsonResponse({'message': 'Job updated successfully!'}, status=200)
-
-        except JobPosting.DoesNotExist:
-            return JsonResponse({'error': 'Job not found'}, status=404)
-        except Industry.DoesNotExist:
-            return JsonResponse({'error': 'Invalid industry ID'}, status=400)
-        except Role.DoesNotExist:
-            return JsonResponse({'error': 'Invalid role ID'}, status=400)
     def delete(self, request, job_id):
         try:
             job = JobPosting.objects.get(id=job_id)
@@ -165,10 +189,10 @@ class AddCityAPIView(APIView):
         city.state = state
         city.save()
 
-        # Send updated data back for confirmation
+       
         return Response({"message": "City updated successfully", "city": {"name": city.name, "state_id": city.state.id}}, status=status.HTTP_200_OK)
 
-    # Delete City
+    #
     def delete(self, request, city_id):
         city = get_object_or_404(City, id=city_id)
         city.delete()
@@ -189,20 +213,22 @@ class IndustryAPIView(APIView):
         else:
             return Response({"error": "Industry name is required"}, status=status.HTTP_400_BAD_REQUEST) 
         
-        
 class RoleAPIView(APIView):
     def get(self, request):
-        industry_id = request.GET.get('industry')
-        
-        if industry_id:
+        industry_name = request.GET.get('industry')
+
+        if industry_name:
+            
             try:
-                industry_id = int(industry_id)  # Convert to integer
-                roles = Role.objects.filter(industry_id=industry_id)
-            except ValueError:
-                return Response({"error": "Invalid industry ID"}, status=status.HTTP_400_BAD_REQUEST)
+                industry = Industry.objects.get(name=industry_name)
+                roles = Role.objects.filter(industry=industry)
+            except Industry.DoesNotExist:
+                return Response({"error": "Industry not found"}, status=status.HTTP_404_NOT_FOUND)
         else:
+          
             roles = Role.objects.all()
-        
+
+ 
         data = [{'id': role.id, 'name': role.name, 'industry_id': role.industry.id} for role in roles]
         return Response(data)
 
@@ -226,7 +252,7 @@ class JobApplicationView(APIView):
         """
         job_applications = JobApplication.objects.select_related('user', 'job_posting').all()
         
-        # Create a list of dictionaries for the response
+       
         applications_data = []
         for application in job_applications:
             applications_data.append({
@@ -246,20 +272,20 @@ class JobApplicationView(APIView):
         Update the status of a specific job application
         """
         try:
-            # Get the job application by ID
+           
             application = JobApplication.objects.get(id=application_id)
         except JobApplication.DoesNotExist:
             return HttpResponseNotFound('Job application not found.')
 
         try:
-            # Parse JSON request body
+            
             data = json.loads(request.body)
             new_status = data.get('status')
 
             if new_status not in ['Applied', 'Interview', 'Hired']:
                 return HttpResponseBadRequest('Invalid status. Status must be one of: Applied, Interview, Hired.')
 
-            # Update the status of the job application
+           
             application.status = new_status
             application.save()
 
@@ -272,23 +298,39 @@ class JobApplicationView(APIView):
             return HttpResponseBadRequest('Invalid JSON body.')
 
 class SuperuserLoginView(APIView):
-    # Allow any user (for now) to access this endpoint
     permission_classes = [AllowAny]
 
     def post(self, request):
-        # Get username and password from the request body
+        
         username = request.data.get('username')
         password = request.data.get('password')
 
-        # Authenticate user using Django's authenticate function
+        
         user = authenticate(username=username, password=password)
         
         if user is not None and user.is_superuser:
-            # Log in the superuser
+          
             login(request, user)
             return Response({'message': 'Login successful', 'status': 'success'})
         else:
-            # If authentication fails or user is not a superuser
+            
             return Response({'message': 'Invalid credentials or not a superuser', 'status': 'error'}, status=400)
 
         return JsonResponse({'message': 'Invalid request method', 'status': 'error'}, status=405)
+    
+    
+    
+class RolelistView(APIView):
+    def get(self, request):
+        industry_id = request.GET.get('industry_id')  # Get industry_id instead of industry_name
+        if industry_id:
+            try:
+                industry = Industry.objects.get(id=industry_id)  # Use ID instead of name
+                roles = Role.objects.filter(industry=industry)
+            except Industry.DoesNotExist:
+                return Response({"error": "Industry not found"}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            roles = Role.objects.all()
+
+        data = [{'id': role.id, 'name': role.name, 'industry_id': role.industry.id} for role in roles]
+        return Response(data)

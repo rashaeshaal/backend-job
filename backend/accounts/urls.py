@@ -8,7 +8,7 @@ urlpatterns = [
     path('states/', StateAPIView.as_view(), name='states'),
     path('citiesl/<int:state_id>/', CityAPIView.as_view(), name='cities'),
     path('handlelogin/', UserLoginView.as_view(), name='login'),
-    path('apply-job/', ApplyJobView.as_view(), name='apply-job'),
+    path('apply/', ApplyJobView.as_view(), name='apply-for-job'),
     path('joblist/', JobListingView.as_view(), name='job_list_create'),
     path('user-job-applications/', UserJobApplicationsView.as_view(), name='user-job-applications'), 
 

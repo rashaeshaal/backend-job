@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth.models import User
 import os
+from rest_framework import status
 from rest_framework.authtoken.models import Token
 from django.conf import settings
 from .models import UserProfile, State,City,JobApplication
@@ -25,7 +26,6 @@ class UserRegisterView(APIView):
             data = request.data
             print(data, 'hiii')
 
-            # Extract fields
             full_name = data.get('full_name')
             email = data.get('email')
             gender = data.get('gender')
@@ -38,17 +38,17 @@ class UserRegisterView(APIView):
             confirm_password = data.get('confirm_password')
             profile_picture = data.get('profile_picture') 
 
-            # Password confirmation check
+           
             if password != confirm_password:
                 raise ValidationError("Passwords do not match.")
 
-            # Check if user is 18 or older
+        
             if date_of_birth:
                 date_of_birth = datetime.strptime(date_of_birth, '%Y-%m-%d').date()
                 if (datetime.now().date() - date_of_birth).days < 18 * 365:
                     raise ValidationError("You must be at least 18 years old.")
 
-            # Check if user already exists by email
+            
             if User.objects.filter(email=email).exists():
                 raise ValidationError("A user with this email already exists.")
 
@@ -59,7 +59,7 @@ class UserRegisterView(APIView):
                 password=make_password(password)
             )
 
-            # Create UserProfile
+            
             user_profile = UserProfile.objects.create(
                 user=user,
                 full_name=full_name,
@@ -73,7 +73,7 @@ class UserRegisterView(APIView):
                 profile_picture=profile_picture 
             )
 
-            # Return success response
+           
             return JsonResponse({"message": "User registered successfully!"}, status=201)
 
         except ValidationError as e:
@@ -85,6 +85,7 @@ class UserRegisterView(APIView):
 
 
 
+
 class UserLoginView(APIView):
     def post(self, request, *args, **kwargs):
         print('Login Request Data:', request.data)
@@ -93,26 +94,27 @@ class UserLoginView(APIView):
             email = data.get('email')
             password = data.get('password')
 
-            # Authenticate the user
+           
             user = authenticate(username=email, password=password)
 
             if user is not None:
-                
-                # Login successful, return user data
+               
                 return JsonResponse({
                     "message": "Login successful",
                     "user": {
+                        "id": user.id,  
                         "email": user.email,
-                        "full_name": user.userprofile.full_name
+                        "full_name": user.userprofile.full_name,
+        
+                        "user_type": 1  
                     }
-                     
-                }, status=200)
+                }, status=status.HTTP_200_OK)
             else:
-                # Authentication failed
-                return JsonResponse({"error": "Invalid email or password"}, status=401)
+             
+                return JsonResponse({"error": "Invalid email or password"}, status=status.HTTP_401_UNAUTHORIZED)
 
         except Exception as e:
-            return JsonResponse({"error": str(e)}, status=500)   
+            return JsonResponse({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
           
 class StateAPIView(APIView):
 
@@ -129,6 +131,7 @@ class CityAPIView(APIView):
         return Response(city_list)  
     
 class JobListingView(APIView):
+    
     def get(self, request, job_id=None):
         if job_id:
             try:
@@ -146,16 +149,16 @@ class JobListingView(APIView):
             except JobPosting.DoesNotExist:
                 return JsonResponse({'error': 'Job not found'}, status=404)
 
-        industry_name = request.GET.get('industry')  # Fetch industry from query params
-        role_name = request.GET.get('role')  # Fetch role from query params
+        industry_name = request.GET.get('industry')  
+        role_name = request.GET.get('role')  
 
         jobs = JobPosting.objects.all()
 
         if industry_name:
-            jobs = jobs.filter(job_industry__name__icontains=industry_name)  # Use __icontains for case-insensitive filtering
+            jobs = jobs.filter(job_industry__name__icontains=industry_name)  
 
         if role_name:
-            jobs = jobs.filter(job_role__name__icontains=role_name)  # Use __icontains for case-insensitive filtering
+            jobs = jobs.filter(job_role__name__icontains=role_name) 
 
         jobs_data = [
             {
@@ -173,37 +176,39 @@ class JobListingView(APIView):
         return JsonResponse({'jobs': jobs_data}, safe=False)
 class ApplyJobView(APIView):
     def post(self, request, *args, **kwargs):
-        email = request.data.get('email')  # Get email from the request
+        data=request.data
+        email = request.data.get('email')  
         job_posting_id = request.data.get('job_posting_id')
         resume = request.FILES.get('resume')
+        print(resume)
 
-        # Validate required fields
+      
         if not all([email, job_posting_id, resume]):
+            print("Email, Job posting ID, and resume are required.")
+            
             return JsonResponse({'error': 'Email, Job posting ID, and resume are required.'}, status=400)
 
-        # Check if the user exists by email
+       
         try:
             user_profile = UserProfile.objects.get(email=email)
-            user = user_profile.user  # Get the related user
+            print(user_profile,"hiiiiiiiiiiiiiiii")
+            user = user_profile.user 
         except UserProfile.DoesNotExist:
             return JsonResponse({'error': 'User with the provided email does not exist.'}, status=404)
 
-        # Check if the job posting exists
         try:
             job_posting = JobPosting.objects.get(id=job_posting_id)
         except JobPosting.DoesNotExist:
             return JsonResponse({'error': 'Job posting does not exist.'}, status=404)
 
-        # Check if the user has already applied for the job
         if JobApplication.objects.filter(user=user, job_posting=job_posting).exists():
             return JsonResponse({'error': 'You have already applied for this job.'}, status=400)
 
-        # Save the resume file in the media directory
+       
         fs = FileSystemStorage(location=os.path.join(settings.MEDIA_ROOT, 'job_applications/resumes/'))
         filename = fs.save(resume.name, resume)
         file_url = fs.url(filename)
 
-        # Create a new job application
         job_application = JobApplication.objects.create(
             user=user,
             job_posting=job_posting,
@@ -217,25 +222,21 @@ class ApplyJobView(APIView):
         }, status=201)
 
 
-
-
 class UserJobApplicationsView(APIView):
     def get(self, request):
         """
         Get all job applications for the user by checking their email
         """
-        email = request.GET.get('email')  # Get the email from query parameters
+        email = request.GET.get('email') 
         if not email:
             return JsonResponse({'error': 'Email is required.'}, status=400)
 
         try:
-            # Check if email exists in the UserProfile
             user_profile = UserProfile.objects.get(email=email)
-            user = user_profile.user  # Get the User instance from UserProfile
+            user = user_profile.user  
         except UserProfile.DoesNotExist:
             return JsonResponse({'error': 'No user found with this email.'}, status=404)
 
-        # Get all job applications for the user
         job_applications = JobApplication.objects.filter(user=user).select_related('job_posting')
 
         applications_list = [
